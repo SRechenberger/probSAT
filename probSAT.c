@@ -47,7 +47,9 @@ int minClauseSize;
 /** The number of occurrence of each literal.*/
 int *numOccurrence;
 /** The clauses where each literal occurs. For literal i : occurrence[i+MAXATOMS][j] gives the clause =
- * the j'th occurrence of literal i.  */
+ * the j'th occurrence of literal +i.  
+ * occurence[MAXATOMS-i][j] contains the j'th occurance of literal -i
+ */
 int **occurrence;
 int maxNumOccurences = 0; //maximum number of occurences for a literal
 /*--------*/
@@ -451,19 +453,25 @@ static inline void pickAndFlipNC() {
 static inline void pickAndFlip() {
   // variable to flip
   int var;
-  // clause of *var*
+  // clause of var
   int rClause = falseClause[flip % numFalse];   // C_u <- randomly selected unsat clause
+  // used for choosing a literal according to
+  // the calculated distribution
   double sumProb = 0.0;
   double randPosition;
   register int i, j;
   int tClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
   i = 0;
+  // as long as there are literals in the clause (clause is 0-terminated)
   while ((var = abs(clause[rClause][i]))) {
+    // calculate the probability of choosing literal i
     probs[i] = probsBreak[breaks[var]];
     sumProb += probs[i];
     i++;
   }
+
+  // choosing a literal in clause C_u
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
   for (i = i - 1; i != 0; i--) {
     sumProb -= probs[i];
@@ -485,16 +493,21 @@ static inline void pickAndFlip() {
     //if the clause is unsat it will become SAT so it has to be removed from the list of unsat-clauses.
     if (numTrueLit[tClause] == 0) {
       //remove from unsat-list
+      // whereFalse[tClause] == where is tClause in the list of false clauses
       falseClause[whereFalse[tClause]] = falseClause[--numFalse]; //overwrite this clause with the last clause in the list.
+      // the last false clause shall now be where tClause was
       whereFalse[falseClause[numFalse]] = whereFalse[tClause];
+      // 'free' the top cell
       whereFalse[tClause] = -1;
+      // because literal i made the clause sat, it is the only literal satisfying it;
+      // thus it is critical
       critVar[tClause] = abs(xMakesSat); //this variable is now critically responsible for satisfying tClause
       //adapt the scores of the variables
-      //the score of x has to be decreased by one because x is critical and will break this clause if fliped.
+      //the score of x has to be increased by one because x is critical and will break this clause if fliped.
       breaks[bestVar]++;
     } else {
-      //if the clause is satisfied by only one literal then the score has to be increased by one for this var.
-      //because fliping this variable will no longer break the clause
+      // if the clause is satisfied by only one literal then the score has to be decreased by one for this var.
+      // because fliping this variable will no longer break the clause
       if (numTrueLit[tClause] == 1) {
         breaks[critVar[tClause]]--;
       }
@@ -506,26 +519,35 @@ static inline void pickAndFlip() {
   //2. all clauses that contain the literal -xMakesSat=0 will not be longer satisfied by variable x.
   //all this clauses contained x as a satisfying literal
   i = 0;
+  // for-all Clauses C containing Literal X:
   while ((tClause = occurrence[numVars - xMakesSat][i])) {
     if (numTrueLit[tClause] == 1) { //then xMakesSat=1 was the satisfying literal.
       //this clause gets unsat.
+      // push it to the list of unsat clauses
       falseClause[numFalse] = tClause;
+      // register its position in the list of unsat clauses
       whereFalse[tClause] = numFalse;
+      // increase the 'stack pointer'
       numFalse++;
-      //the score of x has to be increased by one because it is not breaking any more for this clause.
+      //the score of x has to be decreased by one because it is not breaking any more for this clause.
       breaks[bestVar]--;
       //the scores of all variables have to be increased by one ; inclusive x because flipping them will make the clause again sat
     } else if (numTrueLit[tClause] == 2) { //find which literal is true and make it critical and decrease its score
       j = 0;
+      // for-all Literals Y in Clause D
       while ((var = abs(clause[tClause][j]))) {
-        if (((clause[tClause][j] > 0) == atom[abs(var)])) { //x can not be the var anymore because it was flipped //&&(xMakesSat!=var)
+        // if Y satisfies D 
+        if ((clause[tClause][j] > 0) == atom[abs(var)]) { //x can not be the var anymore because it was flipped //&&(xMakesSat!=var)
+          // Y is critical for D (if its the last satisfying literal in D)
           critVar[tClause] = var;
+          // thus, break(Y) increases
           breaks[var]++;
           break;
         }
         j++;
       }
     }
+    // there is one true literal less in clause C
     numTrueLit[tClause]--;
     i++;
   }
