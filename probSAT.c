@@ -83,7 +83,8 @@ FILE *fp;
 char *fileName;
 /*---------*/
 
-/** Run time variables variables*/BIGINT seed;
+/** Run time variables variables*/
+BIGINT seed;
 BIGINT maxTries = LLONG_MAX;
 BIGINT maxFlips = LLONG_MAX;
 BIGINT flip;
@@ -92,6 +93,7 @@ int run = 1;
 int printSol = 0;
 double tryTime;
 long ticks_per_second;
+// lowest number of false literals so far
 int bestNumFalse;
 //parameters flags - indicates if the parameters were set on the command line
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
@@ -165,7 +167,7 @@ void printSolution() {
 
 }
 
-static inline void printStatsEndFlip() {
+static inline void updateBestNumFalse() {
   if (numFalse < bestNumFalse) {
     //fprintf(stderr, "%8lli numFalse: %5d\n", flip, numFalse);
     bestNumFalse = numFalse;
@@ -311,23 +313,34 @@ static inline void init() {
   register int i, j;
   int critLit = 0, lit;
   numFalse = 0;
+
+  // initialize numTrueLit and whereFalse for each clause
   for (i = 1; i <= numClauses; i++) {
     numTrueLit[i] = 0;
     whereFalse[i] = -1;
   }
 
+  // generate random assignment
   for (i = 1; i <= numVars; i++) {
+    // set literal i to 0 or 1 randomly
     atom[i] = rand() % 2;
+    // initiate break score for literal i
     breaks[i] = 0;
   }
+
   //pass trough all clauses and apply the assignment previously generated
   for (i = 1; i <= numClauses; i++) {
     j = 0;
     while ((lit = clause[i][j])) {
+      // if a literals is satisfied by the assignment
       if (atom[abs(lit)] == (lit > 0)) {
+        // clause i has one more satisfying literal
         numTrueLit[i]++;
+        // the cricical literal is the last satisfied
+        // (irrelevant, if there are more than one satisfied literals)
         critLit = lit;
       }
+      // next literal
       j++;
     }
     if (numTrueLit[i] == 1) {
@@ -336,9 +349,11 @@ static inline void init() {
       critVar[i] = abs(critLit);
       breaks[abs(critLit)]++;
     } else if (numTrueLit[i] == 0) {
-      //add this clause to the list of unsat caluses.
+      // add this clause to the list of unsat clauses.
       falseClause[numFalse] = i;
+      // register the clauses position in the array of false clauses
       whereFalse[i] = numFalse;
+      // increment "stack pointer"
       numFalse++;
     }
   }
@@ -432,9 +447,12 @@ static inline void pickAndFlipNC() {
   }
   //fliping done!
 }
+
 static inline void pickAndFlip() {
+  // variable to flip
   int var;
-  int rClause = falseClause[flip % numFalse];
+  // clause of *var*
+  int rClause = falseClause[flip % numFalse];   // C_u <- randomly selected unsat clause
   double sumProb = 0.0;
   double randPosition;
   register int i, j;
@@ -711,24 +729,38 @@ int main(int argc, char *argv[]) {
   int try = 0;
   tryTime = 0.;
   double totalTime = 0.;
+  // parse command line arguments
   parseParameters(argc, argv);
+  // parse CNF file
   parseFile();
+  // print the properties of the formula
   printFormulaProperties();
+  // setup algorithm parameters (c_b, cache or no cache, ...)
   setupParameters(); //call only after parsing file!!!
+  // initiate the lookup table for faster probability calculation
   initLookUpTable(); //Initialize the look up table
   setupSignalHandler();
+  // print algorithm parameters
   printSolverParameters();
   srand(seed);
 
-  for (try = 0; try < maxTries; try++) {
-    init();
-    bestNumFalse = numClauses;
-    for (flip = 0; flip < maxFlips; flip++) {
-      if (numFalse == 0)
-        break;
-      pickAndFlipVar();
-      printStatsEndFlip(); //update bestNumFalse
+
+
+  for (try = 0; try < maxTries; try++) {          // for i = 1 to maxTries do
+    init();                                       // a <- randomly generated assignment
+    bestNumFalse = numClauses;  
+    for (flip = 0; flip < maxFlips; flip++) {     // for j = 1 to maxFlips do
+      if (numFalse == 0)                          // if (a is model for F) then
+        break;                                    // return a
+      pickAndFlipVar();                           /* C_u <- randomly selected unsat clause
+                                                   * for x in C_u do
+                                                   *   compute f(x,a)
+                                                   * var <- random variable x according to probability f(x,a)/(SUM z IN C_u: f(z,a))
+                                                   * flip(var)
+                                                   */
+      updateBestNumFalse(); //update bestNumFalse
     }
+
     tryTime = elapsed_seconds();
     totalTime += tryTime;
     if (numFalse == 0) {
