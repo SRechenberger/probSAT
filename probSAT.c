@@ -90,6 +90,7 @@ BIGINT seed;
 BIGINT maxTries = LLONG_MAX;
 BIGINT maxFlips = LLONG_MAX;
 BIGINT flip;
+int try;
 float timeOut = FLT_MAX;
 int run = 1;
 int printSol = 0;
@@ -566,7 +567,7 @@ double elapsed_seconds(void) {
 
 static inline void printEndStatistics() {
   printf("\nc EndStatistics:\n");
-  printf("c %-30s: %-9lli\n", "numFlips", flip);
+  printf("c %-30s: %-9lli\n", "numFlips", flip+try*maxFlips);
   printf("c %-30s: %-8.2f\n", "avg. flips/variable", (double) flip / (double) numVars);
   printf("c %-30s: %-8.2f\n", "avg. flips/clause", (double) flip / (double) numClauses);
   printf("c %-30s: %-8.0f\n", "flips/sec", (double) flip / tryTime);
@@ -748,7 +749,7 @@ void setupParameters() {
 }
 
 int main(int argc, char *argv[]) {
-  int try = 0;
+  try = 0;
   tryTime = 0.;
   double totalTime = 0.;
   // parse command line arguments
