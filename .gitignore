@@ -16,6 +16,10 @@
 *.out
 *.app
 probSAT
+probSAT_H
 
 # CNF-Files
 *.cnf
+
+# vim Backup
+*.swp
