@@ -186,6 +186,7 @@ static inline void allocateMemory() {
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
+  clauseEntropy = (double*) malloc(sizeof(int) * (numClauses + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
