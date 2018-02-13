@@ -71,6 +71,7 @@ int bestVar;
 /** the entropy of a clause calculated from the probabilities of the variables beeing chosen. */
 double *clauseEntropy;
 
+
 /*----probSAT variables----*/
 /** Look-up table for the functions. The values are computed in the initProbSAT method.*/
 double *probsBreak;
@@ -187,7 +188,7 @@ static inline void allocateMemory() {
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
-  clauseEntropy = (double*) malloc(sizeof(int) * (numClauses + 1));
+  clauseEntropy = (double*) malloc(sizeof(double) * (numClauses + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -456,23 +457,30 @@ static inline void pickAndFlipNC() {
 
 static inline void pickAndFlip() {
   register int i, j;
+  register double sumProb = 0.0;
   // variable to flip
   int var;
   int rClause = falseClause[0];
   // calculate the false clauses entropy
   for(i=0; i < numFalse; i++){
+    sumProb = 0.0;
     j = 0;
-    // initilize the entropy with 0
-    clauseEntropy[i] = 0;
     // for each literal L_j in clause C_i:
     while((var = abs(clause[falseClause[i]][j]))) {
       // calculate the probability of L_j to be chosen
       probs[j] = probsBreak[breaks[var]];
-      // sum up the entropy
-      clauseEntropy[i] -= probs[j] * log2(probs[j]);
-      // printf("H(%d) = %f\n", i, clauseEntropy[i]);
+      // sum up the prob Values
+      sumProb += probs[j];
       j++;
     }
+    // initilize the entropy with 0
+    clauseEntropy[i] = 0;
+    for(j--; j >= 0; j--){
+      probs[j] = probs[j]/sumProb;
+      clauseEntropy[i] -= probs[j] * log2(probs[j]);
+    }
+    // printf("clauseEntropy[%d] = %.5f\n", i, clauseEntropy[i]);
+
     // if the entropy of the currently analized clause is less than the entropy of the currently best considered clause
     // save the current one
     if(clauseEntropy[i] < clauseEntropy[whereFalse[rClause]]){
@@ -483,7 +491,7 @@ static inline void pickAndFlip() {
 
   // used for choosing a literal according to
   // the calculated distribution
-  double sumProb = 0.0;
+  sumProb = 0.0;
   double randPosition;
   int tClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
@@ -559,11 +567,11 @@ static inline void pickAndFlip() {
       //the scores of all variables have to be increased by one ; inclusive x because flipping them will make the clause again sat
     } else if (numTrueLit[tClause] == 2) { //find which literal is true and make it critical and decrease its score
       j = 0;
-      // for-all Literals Y in Clause D
+      // for-all Literals Y in Clause C
       while ((var = abs(clause[tClause][j]))) {
-        // if Y satisfies D 
+        // if Y satisfies C
         if ((clause[tClause][j] > 0) == atom[abs(var)]) { //x can not be the var anymore because it was flipped //&&(xMakesSat!=var)
-          // Y is critical for D (if its the last satisfying literal in D)
+          // Y is critical for C (if its the last satisfying literal in C)
           critVar[tClause] = var;
           // thus, break(Y) increases
           breaks[var]++;
@@ -641,7 +649,15 @@ void initExp() {
 void parseParameters(int argc, char *argv[]) {
   //define the argument parser
   static struct option long_options[] =
-      { { "fct", required_argument, 0, 'f' }, { "caching", required_argument, 0, 'c' }, { "eps", required_argument, 0, 'e' }, { "cb", required_argument, 0, 'b' }, { "runs", required_argument, 0, 't' }, { "maxflips", required_argument, 0, 'm' }, { "printSolution", no_argument, 0, 'a' }, { "help", no_argument, 0, 'h' }, { 0, 0, 0, 0 } };
+      { { "fct", required_argument, 0, 'f' },
+        { "caching", required_argument, 0, 'c' },
+        { "eps", required_argument, 0, 'e' },
+        { "cb", required_argument, 0, 'b' },
+        { "runs", required_argument, 0, 't' },
+        { "maxflips", required_argument, 0, 'm' },
+        { "printSolution", no_argument, 0, 'a' },
+        { "help", no_argument, 0, 'h' },
+        { 0, 0, 0, 0 } };
 
   while (optind < argc) {
     int index = -1;

@@ -1,12 +1,12 @@
 PENALTY=10
-RUNS=10
-FLIPS=100000
+RUNS=100
+FLIPS=500000
 
 rm OUT1 OUT2
 
-for f in tests/*.cnf
+for f in $1/*.cnf
 do
-  ./probSAT --caching 1 --maxflips ${FLIPS} --runs ${RUNS} ${f} >OUT
+  ./probSAT --caching 1 --maxflips ${FLIPS} --runs ${RUNS} ${f} $2 >OUT
   status=$?
   if [ $status -eq "10" ]
   then
@@ -23,9 +23,9 @@ do
   fi;
 done;
 
-for f in tests/*.cnf
+for f in $1/*.cnf
 do
-  ./probSAT_H --caching 1 --maxflips ${FLIPS} --runs ${RUNS} ${f} >OUT
+  ./probSAT_H --caching 1 --maxflips ${FLIPS} --runs ${RUNS} ${f} $2 >OUT
   status=$?
   if [ $status -eq "10" ]
   then
