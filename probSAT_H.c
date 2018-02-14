@@ -70,6 +70,7 @@ int *critVar;
 int bestVar;
 /** the entropy of a clause calculated from the probabilities of the variables beeing chosen. */
 double *clauseEntropy;
+char *changedEntropy;
 
 
 /*----probSAT variables----*/
@@ -189,6 +190,7 @@ static inline void allocateMemory() {
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
   clauseEntropy = (double*) malloc(sizeof(double) * (numClauses + 1));
+  changedEntropy = (char*) malloc(sizeof(char) * (numClauses + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -325,6 +327,8 @@ static inline void init() {
   for (i = 1; i <= numClauses; i++) {
     numTrueLit[i] = 0;
     whereFalse[i] = -1;
+    changedEntropy[i] = 1;
+    clauseEntropy[i] = 0;
   }
 
   // generate random assignment
@@ -456,34 +460,37 @@ static inline void pickAndFlipNC() {
 }
 
 static inline void pickAndFlip() {
-  register int i, j;
+  register int i, j, k;
   register double sumProb = 0.0;
   // variable to flip
   int var;
   int rClause = falseClause[0];
   // calculate the false clauses entropy
   for(i=0; i < numFalse; i++){
-    sumProb = 0.0;
-    j = 0;
-    // for each literal L_j in clause C_i:
-    while((var = abs(clause[falseClause[i]][j]))) {
-      // calculate the probability of L_j to be chosen
-      probs[j] = probsBreak[breaks[var]];
-      // sum up the prob Values
-      sumProb += probs[j];
-      j++;
-    }
-    // initilize the entropy with 0
-    clauseEntropy[i] = 0;
-    for(j--; j >= 0; j--){
-      probs[j] = probs[j]/sumProb;
-      clauseEntropy[i] -= probs[j] * log2(probs[j]);
-    }
-    // printf("clauseEntropy[%d] = %.5f\n", i, clauseEntropy[i]);
+    if(changedEntropy[falseClause[i]]){
+      sumProb = 0.0;
+      j = 0;
+      // for each literal L_j in clause C_i:
+      while((var = abs(clause[falseClause[i]][j]))) {
+        // calculate the probability of L_j to be chosen
+        probs[j] = probsBreak[breaks[var]];
+        // sum up the prob Values
+        sumProb += probs[j];
+        j++;
+      }
+      // initilize the entropy with 0
+      clauseEntropy[falseClause[i]] = 0;
+      for(j--; j >= 0; j--){
+        probs[j] = probs[j]/sumProb;
+        clauseEntropy[falseClause[i]] -= probs[j] * log2(probs[j]);
+      }
+      // printf("clauseEntropy[%d] = %.5f\n", i, clauseEntropy[i]);
 
-    // if the entropy of the currently analized clause is less than the entropy of the currently best considered clause
-    // save the current one
-    if(clauseEntropy[i] < clauseEntropy[whereFalse[rClause]]){
+      // if the entropy of the currently analized clause is less than the entropy of the currently best considered clause
+      // save the current one
+      changedEntropy[falseClause[i]] = 0;
+    }
+    if(clauseEntropy[falseClause[i]] < clauseEntropy[rClause]){
       rClause = falseClause[i];
     }
   }
@@ -493,7 +500,7 @@ static inline void pickAndFlip() {
   // the calculated distribution
   sumProb = 0.0;
   double randPosition;
-  int tClause; //temporary clause variable
+  int tClause, lClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
   i = 0;
   // as long as there are literals in the clause (clause is 0-terminated)
@@ -525,6 +532,7 @@ static inline void pickAndFlip() {
   while ((tClause = occurrence[xMakesSat + numVars][i])) {
     //if the clause is unsat it will become SAT so it has to be removed from the list of unsat-clauses.
     if (numTrueLit[tClause] == 0) {
+      changedEntropy[tClause] = 1;
       //remove from unsat-list
       // whereFalse[tClause] == where is tClause in the list of false clauses
       falseClause[whereFalse[tClause]] = falseClause[--numFalse]; //overwrite this clause with the last clause in the list.
@@ -542,6 +550,7 @@ static inline void pickAndFlip() {
       // if the clause is satisfied by only one literal then the score has to be decreased by one for this var.
       // because fliping this variable will no longer break the clause
       if (numTrueLit[tClause] == 1) {
+        changedEntropy[tClause] = 1;
         breaks[critVar[tClause]]--;
       }
     }
@@ -555,6 +564,7 @@ static inline void pickAndFlip() {
   // for-all Clauses C containing Literal X:
   while ((tClause = occurrence[numVars - xMakesSat][i])) {
     if (numTrueLit[tClause] == 1) { //then xMakesSat=1 was the satisfying literal.
+      changedEntropy[tClause] = 1;
       //this clause gets unsat.
       // push it to the list of unsat clauses
       falseClause[numFalse] = tClause;
@@ -575,6 +585,15 @@ static inline void pickAndFlip() {
           critVar[tClause] = var;
           // thus, break(Y) increases
           breaks[var]++;
+          k = 0;
+          while((lClause = occurrence[numVars + var][k++])){
+            changedEntropy[lClause] = 1;
+          }
+          k = 0;
+          while((lClause = occurrence[numVars - var][k++])){
+            changedEntropy[lClause] = 1;
+          }
+
           break;
         }
         j++;
