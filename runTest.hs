@@ -4,7 +4,7 @@ import Control.Arrow
 import Control.Concurrent.MVar
 import Control.Concurrent.QSem
 import Control.Concurrent
-import Control.Monad (forM_, forM)
+import Control.Monad (forM_, forM, when)
 import Control.DeepSeq (($!!), NFData)
 import System.Process
 import System.Exit
@@ -76,6 +76,7 @@ benchmarkFromDirectory name dir = do
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
+  status <- newMVar 0
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
@@ -90,16 +91,28 @@ runBenchmark solvercmd args p bm = do
         ExitSuccess    -> putMVar var $ Unknown flips
         ExitFailure 10 -> putMVar var $ Success flips
         others         -> error $ printf "invalid exit code: %s" (show others)
+      n <- takeMVar status
+      putMVar status (n+1)
       hClose hout
       signalQSem semaphor
-
-
     pure var
+  forkIO $ watch status (tests >>> length $ bm) 0
   evalResults (bmname bm) p <$> mapM takeMVar results'
  where
   isResultLine :: String -> Bool
   isResultLine ('c':' ':'F':_) = True
   isResultLine _ = False
+
+  watch :: MVar Int -> Int -> Double -> IO ()
+  watch var 0 _    = pure ()
+  watch var n last = do
+    n' <- readMVar var
+    let percentage = 100 * (toEnum n' / toEnum n)
+    when (percentage > last)
+      (printf "%-25s [%-100s] %.2f percent.\r" (bmname bm) (replicate (fromEnum percentage) '#') percentage)
+    if percentage >= 100
+      then putStrLn ""
+      else watch var n percentage
 
 main :: IO ()
 main = do
