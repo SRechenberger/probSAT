@@ -2,13 +2,18 @@ import System.Directory
 import System.IO
 import Control.Arrow
 import Control.Concurrent.MVar
+import Control.Concurrent.QSem
 import Control.Concurrent
 import Control.Monad (forM_, forM)
+import Control.DeepSeq (($!!), NFData)
 import System.Process
 import System.Exit
 import Text.Printf
 import Data.Foldable
 import Data.Function
+
+force :: NFData a => a -> a
+force a = id $!! a
 
 type Testfile = FilePath
 
@@ -17,8 +22,8 @@ type Flips = Int
 type Penalty = Int -> Int
 
 data SingleResult
-  = Unknown Flips
-  | Success Flips
+  = Unknown !Flips
+  | Success !Flips
 
 isSuccess :: SingleResult -> Bool
 isSuccess (Success _) = True
@@ -38,7 +43,7 @@ data GroupResult = GR
   }
 
 instance Show GroupResult where
-  show gr = printf "%-20s\t%-20d\t%-20d\t%-20.2f\t%-20d\t%-20d\n"
+  show gr = printf "%-20s\t%-20d\t%-20d\t%-20.2f\t%-20d\t%-20d"
     (grname gr)
     (total gr)
     (succs gr)
@@ -70,12 +75,14 @@ benchmarkFromDirectory name dir = do
 
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
+  semaphor <- newQSem 4
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
+      waitQSem semaphor
       (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ [fp]){ std_out = CreatePipe }
       e <- waitForProcess hdl
-      rLine' <- (lines >>> filter isResultLine) <$> hGetContents hout
+      rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
         l:_ -> words >>> drop 2 >>> concat >>> read >>> pure $ l
@@ -83,6 +90,9 @@ runBenchmark solvercmd args p bm = do
         ExitSuccess    -> putMVar var $ Unknown flips
         ExitFailure 10 -> putMVar var $ Success flips
         others         -> error $ printf "invalid exit code: %s" (show others)
+      hClose hout
+      signalQSem semaphor
+
 
     pure var
   evalResults (bmname bm) p <$> mapM takeMVar results'
@@ -93,11 +103,11 @@ runBenchmark solvercmd args p bm = do
 
 main :: IO ()
 main = do
-  (solver:args:penalty'':benchmarks'') <- lines <$> getContents
+  (solver:args:penalty'':benchmarks'') <- (force >>> lines) <$> getContents
   let penalty' = read penalty''
       penalty | penalty' <= 1 = id
               | otherwise    = (* penalty')
-      benchmarks' = map words >>> map (\[n,d] -> (n,d)) $ benchmarks''
+      benchmarks' = map words >>> map (\[n,d] -> (n,d)) $!! benchmarks''
   benchmarks <- mapM (uncurry benchmarkFromDirectory) benchmarks'
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
