@@ -23,4 +23,6 @@ probSAT_H
 
 # vim Backup
 *.swp
-UnifKSATGenerator.jar
+
+# benchmarks
+*.bm

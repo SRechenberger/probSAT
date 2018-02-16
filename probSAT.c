@@ -567,6 +567,7 @@ double elapsed_seconds(void) {
 
 static inline void printEndStatistics() {
   printf("\nc EndStatistics:\n");
+  printf("c F %-9lli\n", flip+try*maxFlips);
   printf("c %-30s: %-9lli\n", "numFlips", flip+try*maxFlips);
   printf("c %-30s: %-8.2f\n", "avg. flips/variable", (double) flip / (double) numVars);
   printf("c %-30s: %-8.2f\n", "avg. flips/clause", (double) flip / (double) numClauses);
