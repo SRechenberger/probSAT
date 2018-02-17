@@ -52,6 +52,7 @@ int *numOccurrence;
  */
 int **occurrence;
 int maxNumOccurences = 0; //maximum number of occurences for a literal
+double maxEntropy;
 /*--------*/
 
 /**----Assignment dependent data----*/
@@ -70,8 +71,8 @@ int *critVar;
 int bestVar;
 /** the entropy of a clause calculated from the probabilities of the variables beeing chosen. */
 double *clauseEntropy;
+double falseClauseEntropySum;
 char *changedEntropy;
-// double goodEntropy;
 
 
 /*----probSAT variables----*/
@@ -107,10 +108,6 @@ int bestNumFalse;
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
 
 inline int abs(int a) {
-  return (a < 0) ? -a : a;
-}
-
-inline double doubleAbs(double a){
   return (a < 0) ? -a : a;
 }
 
@@ -318,7 +315,7 @@ static inline void parseFile() {
   }
   probs = (double*) malloc(sizeof(double) * (numVars + 1));
   breaks = (int*) malloc(sizeof(int) * (numVars + 1));
-  // goodEntropy = log2(maxClauseSize)/2;
+  maxEntropy = log2(maxClauseSize);
   free(numOccurrenceT);
   fclose(fp);
 }
@@ -328,6 +325,7 @@ static inline void init() {
   register int i, j;
   int critLit = 0, lit;
   numFalse = 0;
+  falseClauseEntropySum = 0;
 
   // initialize numTrueLit and whereFalse for each clause
   for (i = 1; i <= numClauses; i++) {
@@ -470,7 +468,7 @@ static inline void pickAndFlip() {
   register double sumProb = 0.0;
   // variable to flip
   int var;
-  int rClause = falseClause[0];
+  int rClause;
   // calculate the false clauses entropy
   for(i=0; i < numFalse; i++){
     if(changedEntropy[falseClause[i]]){
@@ -490,23 +488,32 @@ static inline void pickAndFlip() {
         probs[j] = probs[j]/sumProb;
         clauseEntropy[falseClause[i]] -= probs[j] * log2(probs[j]);
       }
-      clauseEntropy[falseClause[i]] = clauseEntropy[falseClause[i]];
       // printf("clauseEntropy[%d] = %.5f\n", i, clauseEntropy[i]);
 
       // if the entropy of the currently analized clause is less than the entropy of the currently best considered clause
       // save the current one
       changedEntropy[falseClause[i]] = 0;
-    }
-    if(clauseEntropy[falseClause[i]] < clauseEntropy[rClause]){
-      rClause = falseClause[i];
+      falseClauseEntropySum += clauseEntropy[falseClause[i]];
     }
   }
+  double randPosition;
+  randPosition = (double) (rand()) / RAND_MAX * (numFalse * maxEntropy - falseClauseEntropySum);
+  double tmpSum = 0;
+  for(i = 0; i < numFalse; i++){
+    tmpSum += (maxEntropy - clauseEntropy[falseClause[i]]);
+    if(randPosition <= tmpSum)
+      break;
+  }
+  rClause = falseClause[i];
+  // fprintf(stderr, "H(c_%d) = %.2f = %.2f - %.2f (die: %f; i: %d; numFalse: %d; sumEntropy: %.2f)\n",
+  //      rClause, maxEntropy - clauseEntropy[rClause], maxEntropy, clauseEntropy[rClause], randPosition, i, numFalse, falseClauseEntropySum);
+
+  
 
 
   // used for choosing a literal according to
   // the calculated distribution
   sumProb = 0.0;
-  double randPosition;
   int tClause, lClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
   i = 0;
@@ -540,6 +547,7 @@ static inline void pickAndFlip() {
     //if the clause is unsat it will become SAT so it has to be removed from the list of unsat-clauses.
     if (numTrueLit[tClause] == 0) {
       changedEntropy[tClause] = 1;
+      falseClauseEntropySum -= clauseEntropy[tClause];
       //remove from unsat-list
       // whereFalse[tClause] == where is tClause in the list of false clauses
       falseClause[whereFalse[tClause]] = falseClause[--numFalse]; //overwrite this clause with the last clause in the list.
@@ -594,10 +602,14 @@ static inline void pickAndFlip() {
           breaks[var]++;
           k = 0;
           while((lClause = occurrence[numVars + var][k++])){
+            if(numTrueLit[lClause] <= 0 && !changedEntropy[lClause])
+              falseClauseEntropySum -= clauseEntropy[lClause];
             changedEntropy[lClause] = 1;
           }
           k = 0;
           while((lClause = occurrence[numVars - var][k++])){
+            if(numTrueLit[lClause] <= 0 && !changedEntropy[lClause])
+              falseClauseEntropySum -= clauseEntropy[lClause];
             changedEntropy[lClause] = 1;
           }
 

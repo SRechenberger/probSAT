@@ -76,27 +76,28 @@ benchmarkFromDirectory name dir = do
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
-  status <- newMVar 0
+  -- status <- newMVar 0
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ [fp]){ std_out = CreatePipe }
+      (_, Just hout, _, hdl) <- createProcess (proc "timeout" $ ["100", solvercmd] ++ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
         l:_ -> words >>> drop 2 >>> concat >>> read >>> pure $ l
       case e of
-        ExitSuccess    -> putMVar var $ Unknown flips
-        ExitFailure 10 -> putMVar var $ Success flips
-        others         -> error $ printf "invalid exit code: %s" (show others)
-      n <- takeMVar status
-      putMVar status (n+1)
+        ExitSuccess     -> putMVar var $ Unknown flips
+        ExitFailure 10  -> putMVar var $ Success flips
+        ExitFailure 124 -> putMVar var $ Unknown flips
+        others          -> error $ printf "invalid exit code: %s" (show others)
+      -- n <- takeMVar status
+      -- putMVar status (n+1)
       hClose hout
       signalQSem semaphor
     pure var
-  forkIO $ watch status (tests >>> length $ bm) 0
+  -- forkIO $ watch status (tests >>> length $ bm) 0
   evalResults (bmname bm) p <$> mapM takeMVar results'
  where
   isResultLine :: String -> Bool
