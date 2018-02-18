@@ -18,6 +18,7 @@
 probSAT
 probSAT_H
 probSAT_PH
+probSAT_L
 
 # CNF-Files
 *.cnf
