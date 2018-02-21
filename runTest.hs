@@ -12,6 +12,11 @@ import Text.Printf
 import Data.Foldable
 import Data.Function
 
+import Debug.Trace
+
+debug :: Show a => a -> a
+debug a = trace (show a) a
+
 force :: NFData a => a -> a
 force a = id $!! a
 
@@ -22,16 +27,20 @@ type Flips = Int
 type Penalty = Int -> Int
 
 data SingleResult
-  = Unknown !Flips
-  | Success !Flips
+  = Unknown !Flips Double
+  | Success !Flips Double
 
 isSuccess :: SingleResult -> Bool
-isSuccess (Success _) = True
+isSuccess (Success _ _) = True
 isSuccess _           = False
 
 getFlips :: Penalty -> SingleResult -> Flips
-getFlips p (Unknown f) = p f
-getFlips _ (Success f) = f
+getFlips p (Unknown f _) = p f
+getFlips _ (Success f _) = f
+
+getEntropy :: SingleResult -> Double
+getEntropy (Unknown _ e) = e
+getEntropy (Success _ e) = e
 
 data GroupResult = GR
   { grname   :: String
@@ -40,6 +49,7 @@ data GroupResult = GR
   , avgFlips :: Double
   , maxFlips :: Int
   , minFlips :: Int
+  , steps    :: [(Int, Double)]
   }
 
 instance Show GroupResult where
@@ -61,6 +71,7 @@ evalResults n p results = GR
                 in s/l
   , maxFlips = maximumBy (compare `on` getFlips p) >>> getFlips p $ results
   , minFlips = minimumBy (compare `on` getFlips p) >>> getFlips p $ results
+  , steps    = map (\l -> (getFlips p l, getEntropy l)) results
   }
 
 data Benchmark = Benchmark
@@ -75,33 +86,29 @@ benchmarkFromDirectory name dir = do
 
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
-  semaphor <- newQSem 4
-  -- status <- newMVar 0
+  semaphor <- newQSem 1
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      (_, Just hout, _, hdl) <- createProcess (proc "timeout" $ ["100", solvercmd] ++ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
-      flips <- case rLine' of
+      (flips,entropy) <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
-        l:_ -> words >>> drop 2 >>> concat >>> read >>> pure $ l
+        l:_ -> words >>> drop 1 >>> (\(f:h:_) -> (read f, read h)) >>> pure $ l
       case e of
-        ExitSuccess     -> putMVar var $ Unknown flips
-        ExitFailure 10  -> putMVar var $ Success flips
-        ExitFailure 124 -> putMVar var $ Unknown flips
+        ExitSuccess     -> putMVar var $ Unknown flips entropy
+        ExitFailure 10  -> putMVar var $ Success flips entropy
+        ExitFailure 124 -> putMVar var $ Unknown flips entropy
         others          -> error $ printf "invalid exit code: %s" (show others)
-      -- n <- takeMVar status
-      -- putMVar status (n+1)
       hClose hout
       signalQSem semaphor
     pure var
-  -- forkIO $ watch status (tests >>> length $ bm) 0
   evalResults (bmname bm) p <$> mapM takeMVar results'
  where
   isResultLine :: String -> Bool
-  isResultLine ('c':' ':'F':_) = True
+  isResultLine ('c':'E':_) = True
   isResultLine _ = False
 
   watch :: MVar Int -> Int -> Double -> IO ()
@@ -117,7 +124,7 @@ runBenchmark solvercmd args p bm = do
 
 main :: IO ()
 main = do
-  (solver:args:penalty'':benchmarks'') <- (force >>> lines) <$> getContents
+  (elogfile:solver:args:penalty'':benchmarks'') <- (force >>> lines) <$> getContents
   let penalty' = read penalty''
       penalty | penalty' <= 1 = id
               | otherwise    = (* penalty')
@@ -128,6 +135,11 @@ main = do
   printf "%-20s\t%-20s\t%-20s\t%-20s\t%-20s\t%-20s\n"
     "name" "total" "succs" "avg flips" "max flips" "min flips"
   forM_ results print
+
+  withFile elogfile WriteMode $ \h -> do
+    hPrintf h "%s,%s\n" "flips" "entropy"
+    forM_ (map steps >>> concat $ results) (\(f,e) -> hPrintf h "%d,%.5f\n" f e)
+    
 
 
 

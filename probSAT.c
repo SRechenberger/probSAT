@@ -101,6 +101,9 @@ int bestNumFalse;
 //parameters flags - indicates if the parameters were set on the command line
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
 
+int *flipCount;
+int mostFlipped;
+
 inline int abs(int a) {
   return (a < 0) ? -a : a;
 }
@@ -185,6 +188,7 @@ static inline void allocateMemory() {
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
+  flipCount = (int*) malloc(sizeof(int) * (numVars + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -329,6 +333,7 @@ static inline void init() {
     atom[i] = rand() % 2;
     // initiate break score for literal i
     breaks[i] = 0;
+    flipCount[i] = 0;
   }
 
   //pass trough all clauses and apply the assignment previously generated
@@ -487,6 +492,10 @@ static inline void pickAndFlip() {
     xMakesSat = bestVar; //if x=0 then all clauses containing x will be made sat after fliping x
 
   atom[bestVar] = 1 - atom[bestVar];
+  flipCount[bestVar]++;
+  if(flipCount[bestVar] > flipCount[mostFlipped]){
+    mostFlipped = bestVar;
+  }
 
   //1. all clauses that contain the literal xMakesSat will become SAT, if they where not already sat.
   i = 0;
@@ -752,7 +761,11 @@ void setupParameters() {
 int main(int argc, char *argv[]) {
   try = 0;
   tryTime = 0.;
-  double totalTime = 0.;
+  double totalTime = 0.,
+         entropy,
+         p;
+  int i;
+
   // parse command line arguments
   parseParameters(argc, argv);
   // parse CNF file
@@ -785,6 +798,10 @@ int main(int argc, char *argv[]) {
       updateBestNumFalse(); //update bestNumFalse
     }
 
+
+
+
+
     tryTime = elapsed_seconds();
     totalTime += tryTime;
     if (numFalse == 0) {
@@ -794,6 +811,14 @@ int main(int argc, char *argv[]) {
         return 0;
       } else {
         printEndStatistics();
+        entropy = 0;
+        for(i = 1; i <= numVars; i++){
+          p = (double) flipCount[i] / (double) (flip-1);
+          if(flipCount[i]){
+            entropy -= p * log2(p);
+          }
+        }
+        printf("cE %lld %-20.5f\n", flip, entropy);
         printf("s SATISFIABLE\n");
         if (printSol == 1)
           printSolution();
