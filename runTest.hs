@@ -1,3 +1,5 @@
+#!/usr/bin/runhaskell
+
 import System.Directory
 import System.IO
 import Control.Arrow
@@ -91,13 +93,14 @@ benchmarkFromDirectory name dir = do
 
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
-  semaphor <- newQSem 2
+  semaphor <- newQSem 4
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
       cb <- getRandomR (0,5) :: IO Double
-      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ ["--cb", printf "%.2f" cb] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      let cbOpt = ["--cb", printf "%.2f" cb]
+      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       (flips,entropy) <- case rLine' of

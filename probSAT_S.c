@@ -310,6 +310,11 @@ static inline void parseFile() {
     occurrence[lit + numVars][numOccurrence[lit + numVars]] = 0; //sentinel at the end!
   }
   probs = (double*) malloc(sizeof(double) * (numVars + 1));
+
+  for(i = 1; i <= numVars; i++){
+    probs[i] = 0.24 * ( (double) (numOccurrence[numVars + i] + numOccurrence[numVars - i])/(double) numClauses );
+  }
+
   breaks = (int*) malloc(sizeof(int) * (numVars + 1));
   free(numOccurrenceT);
   fclose(fp);
@@ -399,26 +404,19 @@ static inline void pickAndFlipNC() {
   int xMakesSat = 0;
   i = 0;
   while ((lit = clause[rClause][i])) {
-    breaks[i] = 0;
-    //lit = clause[rClause][i];
-    //numOccurenceX = numOccurrence[numVars - lit]; //only the negated occurrence of lit will count for break
-    j=0;
-    while ((tClause = occurrence[numVars - lit][j])){
-      if (numTrueLit[tClause] == 1)
-        breaks[i]++;
-      j++;
-    }
-    probs[i] = probsBreak[breaks[i]];
-    sumProb += probs[i];
+    sumProb += probs[abs(lit)];
     i++;
   }
+
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
-  for (i = i - 1; i != 0; i--) {
-    sumProb -= probs[i];
-    if (sumProb <= randPosition)
+  while ((lit = clause[rClause][i])) {
+    i--;
+    sumProb -= probs[abs(lit)];
+    if(randPosition >= sumProb){
       break;
+    }
   }
-  bestVar = abs(clause[rClause][i]);
+  bestVar = abs(lit);
 
   //flip bestvar
   if (atom[bestVar])
