@@ -309,10 +309,12 @@ static inline void parseFile() {
     }
     occurrence[lit + numVars][numOccurrence[lit + numVars]] = 0; //sentinel at the end!
   }
-  probs = (double*) malloc(sizeof(double) * (numVars + 1));
-
+  probs = (double*) malloc(sizeof(double) * (numLiterals + 1));
+  double k = 1.7;
   for(i = 1; i <= numVars; i++){
-    probs[i] = 0.24 * ( (double) (numOccurrence[numVars + i] + numOccurrence[numVars - i])/(double) numClauses );
+    probs[numVars + i] = pow(k, -(double) (numOccurrence[numVars - i])/* /(double) numClauses */);
+    probs[numVars - i] = pow(k, -(double) (numOccurrence[numVars + i])/* /(double) numClauses*/ );
+    // printf("c p(%d) = %f p(-%d) = %f\n", i, probs[numVars + i], i, probs[numVars - i]);
   }
 
   breaks = (int*) malloc(sizeof(int) * (numVars + 1));
@@ -466,23 +468,23 @@ static inline void pickAndFlip() {
   register int i, j;
   int tClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
+  int lit;
   i = 0;
-  // as long as there are literals in the clause (clause is 0-terminated)
-  while ((var = abs(clause[rClause][i]))) {
-    // calculate the probability of choosing literal i
-    probs[i] = probsBreak[breaks[var]];
-    sumProb += probs[i];
+  while ((lit = clause[rClause][i])) {
+    sumProb += probs[numVars + lit];
     i++;
   }
-
-  // choosing a literal in clause C_u
+  i--;
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
-  for (i = i - 1; i != 0; i--) {
-    sumProb -= probs[i];
-    if (sumProb <= randPosition)
+  while ((lit = clause[rClause][i])) {
+    sumProb -= probs[numVars + lit];
+    if(randPosition >= sumProb){
       break;
+    }
+    i--;
   }
-  bestVar = abs(clause[rClause][i]);
+  bestVar = abs(lit);
+  // printf("c chosen: %d (p(%d) = %f)\n", lit, lit, probs[numVars + lit]);
 
   if (atom[bestVar] == 1)
     xMakesSat = -bestVar; //if x=1 then all clauses containing -x will be made sat after fliping x
@@ -825,7 +827,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("cE %lld %-20.5f\n", flip, entropy);
         printf("c UNKNOWN");
-        printFlipOccurrence();
+       // printFlipOccurrence();
         return 0;
       } else {
         printEndStatistics();
@@ -833,15 +835,15 @@ int main(int argc, char *argv[]) {
         printf("s SATISFIABLE\n");
         if (printSol == 1)
           printSolution();
-        printFlipOccurrence();
+       // printFlipOccurrence();
         return 10;
       }
     }
-   //   printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
   printf("cE %lld %-20.5f\n", flip, entropy);
-  printFlipOccurrence();
+  //printFlipOccurrence();
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;

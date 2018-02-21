@@ -827,7 +827,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("cE %lld %-20.5f\n", flip, entropy);
         printf("c UNKNOWN");
-        printFlipOccurrence();
+        //printFlipOccurrence();
         return 0;
       } else {
         printEndStatistics();
@@ -835,15 +835,15 @@ int main(int argc, char *argv[]) {
         printf("s SATISFIABLE\n");
         if (printSol == 1)
           printSolution();
-        printFlipOccurrence();
+        //printFlipOccurrence();
         return 10;
       }
     }
-   //   printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
   printf("cE %lld %-20.5f\n", flip, entropy);
-  printFlipOccurrence();
+  // printFlipOccurrence();
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;
