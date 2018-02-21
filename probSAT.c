@@ -38,6 +38,8 @@ int numClauses;
 int numLiterals;
 /** The value of the variables. The numbering starts at 1 and the possible values are 0 or 1. */
 char *atom;
+char *initial;
+char *last;
 /** The clauses of the formula represented as: clause[clause_number][literal_number].
  * The clause and literal numbering start both at 1. literal and clause 0 0 is sentinel*/
 int **clause;
@@ -100,6 +102,8 @@ long ticks_per_second;
 int bestNumFalse;
 //parameters flags - indicates if the parameters were set on the command line
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
+
+int *flipCount;
 
 inline int abs(int a) {
   return (a < 0) ? -a : a;
@@ -181,10 +185,13 @@ static inline void allocateMemory() {
   // Allocating memory for the instance data (independent from the assignment).
   numLiterals = numVars * 2;
   atom = (char*) malloc(sizeof(char) * (numVars + 1));
+  initial = (char*) malloc(sizeof(char) * (numVars + 1));
+  last = (char*) malloc(sizeof(char) * (numVars + 1));
   clause = (int**) malloc(sizeof(int*) * (numClauses + 1));
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
+  flipCount = (int*) malloc(sizeof(int) * (numVars + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -327,8 +334,11 @@ static inline void init() {
   for (i = 1; i <= numVars; i++) {
     // set literal i to 0 or 1 randomly
     atom[i] = rand() % 2;
+    initial[i] = atom[i];
+    last[i] = atom[i];
     // initiate break score for literal i
     breaks[i] = 0;
+    flipCount[i] = 0;
   }
 
   //pass trough all clauses and apply the assignment previously generated
@@ -386,7 +396,7 @@ static inline void pickAndFlipNC() {
   register int i, j;
   int bestVar;
   int rClause, tClause;
-  rClause = falseClause[flip % numFalse]; //random unsat clause
+  rClause = falseClause[rand() % numFalse]; //random unsat clause
   bestVar = abs(clause[rClause][0]);
   double randPosition;
   int lit;
@@ -487,6 +497,7 @@ static inline void pickAndFlip() {
     xMakesSat = bestVar; //if x=0 then all clauses containing x will be made sat after fliping x
 
   atom[bestVar] = 1 - atom[bestVar];
+  flipCount[bestVar]++;
 
   //1. all clauses that contain the literal xMakesSat will become SAT, if they where not already sat.
   i = 0;
@@ -573,6 +584,41 @@ static inline void printEndStatistics() {
   printf("c %-30s: %-8.2f\n", "avg. flips/clause", (double) flip / (double) numClauses);
   printf("c %-30s: %-8.0f\n", "flips/sec", (double) flip / tryTime);
   printf("c %-30s: %-8.4f\n", "CPU Time", tryTime);
+}
+
+static void printWalkEntropy(){
+  double walkEntropy = 0,
+         maxEntropy = log2(numVars);
+  double p;
+  double max = (double) flipCount[0]/ (double) flip,
+         min = (double) flipCount[0]/ (double) flip;
+  int unflipped = 0;
+
+  int hamming = 0,
+      hammingLast = 0;
+  for(int i = 1; i <= numVars; i++){
+    p = (double) flipCount[i] / (double) flip;
+    if(p > max) max = p;
+    if(p < min) min = p;
+    if(flipCount[i]){
+      walkEntropy -= p * log2(p);
+    } else {
+      unflipped++;
+    }
+
+    if(initial[i] != atom[i]){
+      hamming++;
+    }
+    if(last[i] != atom[i]){
+      hammingLast++;
+      last[i] = atom[i];
+    }
+      
+      
+  }
+
+  printf("\nc Entropy after %lld steps: %.5f (of max %.5f) minp = %f maxp = %f unflipped = %d dTotal = %d dLast = %d",
+      flip, walkEntropy, maxEntropy, min, max, unflipped, hamming, hammingLast);
 }
 
 static inline void printUsage() {
@@ -749,6 +795,8 @@ void setupParameters() {
     initLookUpTable = initExp;
 }
 
+
+
 int main(int argc, char *argv[]) {
   try = 0;
   tryTime = 0.;
@@ -768,7 +816,7 @@ int main(int argc, char *argv[]) {
   printSolverParameters();
   srand(seed);
 
-
+  int t = 0;
 
   for (try = 0; try < maxTries; try++) {          // for i = 1 to maxTries do
     init();                                       // a <- randomly generated assignment
@@ -782,6 +830,10 @@ int main(int argc, char *argv[]) {
                                                    * var <- random variable x according to probability f(x,a)/(SUM z IN C_u: f(z,a))
                                                    * flip(var)
                                                    */
+      if(flip > 0 && flip == numVars*pow(10,t)){
+        printWalkEntropy();
+        t++;
+      }
       updateBestNumFalse(); //update bestNumFalse
     }
 

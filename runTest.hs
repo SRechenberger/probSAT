@@ -1,3 +1,5 @@
+#!/usr/bin/runhaskell
+
 import System.Directory
 import System.IO
 import Control.Arrow
@@ -81,7 +83,7 @@ runBenchmark solvercmd args p bm = do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      (_, Just hout, _, hdl) <- createProcess (proc "timeout" $ ["100", solvercmd] ++ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      (_, Just hout, _, hdl) <- createProcess (proc "timeout" $ ["10", solvercmd] ++ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
@@ -117,7 +119,7 @@ runBenchmark solvercmd args p bm = do
 
 main :: IO ()
 main = do
-  (solver:args:penalty'':benchmarks'') <- (force >>> lines) <$> getContents
+  (logname:solver:args:penalty'':benchmarks'') <- (force >>> lines) <$> getContents
   let penalty' = read penalty''
       penalty | penalty' <= 1 = id
               | otherwise    = (* penalty')
@@ -125,9 +127,10 @@ main = do
   benchmarks <- mapM (uncurry benchmarkFromDirectory) benchmarks'
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
-  printf "%-20s\t%-20s\t%-20s\t%-20s\t%-20s\t%-20s\n"
-    "name" "total" "succs" "avg flips" "max flips" "min flips"
-  forM_ results print
+  withFile logname WriteMode $ \hdl -> do
+    hPutStr hdl $ printf "%-20s\t%-20s\t%-20s\t%-20s\t%-20s\t%-20s\n"
+      "name" "total" "succs" "avg flips" "max flips" "min flips"
+    forM_ results (show >>> hPutStr hdl)
 
 
 

@@ -490,7 +490,6 @@ static inline void pickAndFlip() {
         probs[j] = probs[j]/sumProb;
         clauseEntropy[falseClause[i]] -= probs[j] * log2(probs[j]);
       }
-      clauseEntropy[falseClause[i]] = doubleAbs(goodEntropy - clauseEntropy[falseClause[i]]);
       // printf("clauseEntropy[%d] = %.5f\n", i, clauseEntropy[i]);
 
       // if the entropy of the currently analized clause is less than the entropy of the currently best considered clause
@@ -510,6 +509,7 @@ static inline void pickAndFlip() {
   int tClause, lClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
   i = 0;
+
   // as long as there are literals in the clause (clause is 0-terminated)
   while ((var = abs(clause[rClause][i]))) {
     // calculate the probability of choosing literal i
@@ -517,7 +517,6 @@ static inline void pickAndFlip() {
     sumProb += probs[i];
     i++;
   }
-
   // choosing a literal in clause C_u
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
   for (i = i - 1; i != 0; i--) {
@@ -526,7 +525,7 @@ static inline void pickAndFlip() {
       break;
   }
   bestVar = abs(clause[rClause][i]);
-
+  
   if (atom[bestVar] == 1)
     xMakesSat = -bestVar; //if x=1 then all clauses containing -x will be made sat after fliping x
   else
