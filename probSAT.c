@@ -799,6 +799,13 @@ int main(int argc, char *argv[]) {
     }
 
 
+    entropy = 0;
+    for(i = 1; i <= numVars; i++){
+      p = (double) flipCount[i] / (double) (flip-1);
+      if(flipCount[i]){
+        entropy -= p * log2(p);
+      }
+    }
 
 
 
@@ -807,27 +814,22 @@ int main(int argc, char *argv[]) {
     if (numFalse == 0) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
+        printf("cE %lld %-20.5f\n", flip, entropy);
         printf("c UNKNOWN");
         return 0;
       } else {
         printEndStatistics();
-        entropy = 0;
-        for(i = 1; i <= numVars; i++){
-          p = (double) flipCount[i] / (double) (flip-1);
-          if(flipCount[i]){
-            entropy -= p * log2(p);
-          }
-        }
         printf("cE %lld %-20.5f\n", flip, entropy);
         printf("s SATISFIABLE\n");
         if (printSol == 1)
           printSolution();
         return 10;
       }
-    } else
-      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    }
+   //   printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
+  printf("cE %lld %-20.5f\n", flip, entropy);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;

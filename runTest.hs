@@ -11,6 +11,7 @@ import System.Exit
 import Text.Printf
 import Data.Foldable
 import Data.Function
+import Control.Monad.Random
 
 import Debug.Trace
 
@@ -27,20 +28,24 @@ type Flips = Int
 type Penalty = Int -> Int
 
 data SingleResult
-  = Unknown !Flips Double
-  | Success !Flips Double
+  = Unknown !Flips Double Double
+  | Success !Flips Double Double
 
 isSuccess :: SingleResult -> Bool
-isSuccess (Success _ _) = True
+isSuccess (Success _ _ _) = True
 isSuccess _           = False
 
 getFlips :: Penalty -> SingleResult -> Flips
-getFlips p (Unknown f _) = p f
-getFlips _ (Success f _) = f
+getFlips p (Unknown f _ _) = p f
+getFlips _ (Success f _ _) = f
 
 getEntropy :: SingleResult -> Double
-getEntropy (Unknown _ e) = e
-getEntropy (Success _ e) = e
+getEntropy (Unknown _ e _) = e
+getEntropy (Success _ e _) = e
+
+getCB :: SingleResult -> Double
+getCB (Success _ _ cb) = cb
+getCB (Unknown _ _ cb) = cb
 
 data GroupResult = GR
   { grname   :: String
@@ -49,7 +54,7 @@ data GroupResult = GR
   , avgFlips :: Double
   , maxFlips :: Int
   , minFlips :: Int
-  , steps    :: [(Int, Double)]
+  , steps    :: [(Int, Double, Double)]
   }
 
 instance Show GroupResult where
@@ -71,7 +76,7 @@ evalResults n p results = GR
                 in s/l
   , maxFlips = maximumBy (compare `on` getFlips p) >>> getFlips p $ results
   , minFlips = minimumBy (compare `on` getFlips p) >>> getFlips p $ results
-  , steps    = map (\l -> (getFlips p l, getEntropy l)) results
+  , steps    = map (\l -> (getFlips p l, getEntropy l, getCB l)) results
   }
 
 data Benchmark = Benchmark
@@ -86,21 +91,22 @@ benchmarkFromDirectory name dir = do
 
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
 runBenchmark solvercmd args p bm = do
-  semaphor <- newQSem 1
+  semaphor <- newQSem 2
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      cb <- getRandomR (0,5) :: IO Double
+      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ ["--cb", printf "%.2f" cb] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       (flips,entropy) <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
         l:_ -> words >>> drop 1 >>> (\(f:h:_) -> (read f, read h)) >>> pure $ l
       case e of
-        ExitSuccess     -> putMVar var $ Unknown flips entropy
-        ExitFailure 10  -> putMVar var $ Success flips entropy
-        ExitFailure 124 -> putMVar var $ Unknown flips entropy
+        ExitSuccess     -> putMVar var $ Unknown flips entropy cb
+        ExitFailure 10  -> putMVar var $ Success flips entropy cb
+        ExitFailure 124 -> putMVar var $ Unknown flips entropy cb
         others          -> error $ printf "invalid exit code: %s" (show others)
       hClose hout
       signalQSem semaphor
@@ -137,8 +143,8 @@ main = do
   forM_ results print
 
   withFile elogfile WriteMode $ \h -> do
-    hPrintf h "%s,%s\n" "flips" "entropy"
-    forM_ (map steps >>> concat $ results) (\(f,e) -> hPrintf h "%d,%.5f\n" f e)
+    hPrintf h "%s,%s,%s\n" "flips" "entropy" "cb"
+    forM_ (map steps >>> concat $ results) (\(f,e,cb) -> hPrintf h "%d,%.5f,%.2f\n" f e cb)
     
 
 
