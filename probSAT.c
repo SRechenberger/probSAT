@@ -103,7 +103,10 @@ int bestNumFalse;
 //parameters flags - indicates if the parameters were set on the command line
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
 
-int *flipCount;
+char *justChosen;
+int *clauseCount;
+int mostChosenClause;
+double maxClauseEntropy;
 
 inline int abs(int a) {
   return (a < 0) ? -a : a;
@@ -191,7 +194,8 @@ static inline void allocateMemory() {
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
-  flipCount = (int*) malloc(sizeof(int) * (numVars + 1));
+  clauseCount = (int*) malloc(sizeof(int) * (numClauses + 1));
+  justChosen = (char*) malloc(sizeof(char) * (numClauses + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -315,6 +319,7 @@ static inline void parseFile() {
   probs = (double*) malloc(sizeof(double) * (numVars + 1));
   breaks = (int*) malloc(sizeof(int) * (numVars + 1));
   free(numOccurrenceT);
+  maxClauseEntropy = log2(numClauses);
   fclose(fp);
 }
 
@@ -328,6 +333,7 @@ static inline void init() {
   for (i = 1; i <= numClauses; i++) {
     numTrueLit[i] = 0;
     whereFalse[i] = -1;
+    justChosen[i] = 0;
   }
 
   // generate random assignment
@@ -338,11 +344,11 @@ static inline void init() {
     last[i] = atom[i];
     // initiate break score for literal i
     breaks[i] = 0;
-    flipCount[i] = 0;
   }
 
   //pass trough all clauses and apply the assignment previously generated
   for (i = 1; i <= numClauses; i++) {
+    clauseCount[i] = 0;
     j = 0;
     while ((lit = clause[i][j])) {
       // if a literals is satisfied by the assignment
@@ -465,7 +471,8 @@ static inline void pickAndFlip() {
   // variable to flip
   int var;
   // clause of var
-  int rClause = falseClause[flip % numFalse];   // C_u <- randomly selected unsat clause
+  int rClause;
+  rClause = falseClause[rand() % numFalse];   // C_u <- randomly selected unsat clause
   // used for choosing a literal according to
   // the calculated distribution
   double sumProb = 0.0;
@@ -481,6 +488,7 @@ static inline void pickAndFlip() {
     sumProb += probs[i];
     i++;
   }
+  clauseCount[rClause]++;
 
   // choosing a literal in clause C_u
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
@@ -497,7 +505,6 @@ static inline void pickAndFlip() {
     xMakesSat = bestVar; //if x=0 then all clauses containing x will be made sat after fliping x
 
   atom[bestVar] = 1 - atom[bestVar];
-  flipCount[bestVar]++;
 
   //1. all clauses that contain the literal xMakesSat will become SAT, if they where not already sat.
   i = 0;
@@ -586,40 +593,7 @@ static inline void printEndStatistics() {
   printf("c %-30s: %-8.4f\n", "CPU Time", tryTime);
 }
 
-static void printWalkEntropy(){
-  double walkEntropy = 0,
-         maxEntropy = log2(numVars);
-  double p;
-  double max = (double) flipCount[0]/ (double) flip,
-         min = (double) flipCount[0]/ (double) flip;
-  int unflipped = 0;
 
-  int hamming = 0,
-      hammingLast = 0;
-  for(int i = 1; i <= numVars; i++){
-    p = (double) flipCount[i] / (double) flip;
-    if(p > max) max = p;
-    if(p < min) min = p;
-    if(flipCount[i]){
-      walkEntropy -= p * log2(p);
-    } else {
-      unflipped++;
-    }
-
-    if(initial[i] != atom[i]){
-      hamming++;
-    }
-    if(last[i] != atom[i]){
-      hammingLast++;
-      last[i] = atom[i];
-    }
-      
-      
-  }
-
-  printf("\nc Entropy after %lld steps: %.5f (of max %.5f) minp = %f maxp = %f unflipped = %d dTotal = %d dLast = %d",
-      flip, walkEntropy, maxEntropy, min, max, unflipped, hamming, hammingLast);
-}
 
 static inline void printUsage() {
   printf("\n----------------------------------------------------------\n");
@@ -795,7 +769,16 @@ void setupParameters() {
     initLookUpTable = initExp;
 }
 
-
+double clauseEntropy(){
+  double sum = 0, p;
+  for(int i = 1;i <= numClauses; i++){
+    if(clauseCount[i]){
+      p = (double)clauseCount[i] / (double) flip;
+      sum -= p * log2(p);
+    }
+  }
+  return sum;
+}
 
 int main(int argc, char *argv[]) {
   try = 0;
@@ -816,7 +799,6 @@ int main(int argc, char *argv[]) {
   printSolverParameters();
   srand(seed);
 
-  int t = 0;
 
   for (try = 0; try < maxTries; try++) {          // for i = 1 to maxTries do
     init();                                       // a <- randomly generated assignment
@@ -830,10 +812,6 @@ int main(int argc, char *argv[]) {
                                                    * var <- random variable x according to probability f(x,a)/(SUM z IN C_u: f(z,a))
                                                    * flip(var)
                                                    */
-      if(flip > 0 && flip == numVars*pow(10,t)){
-        printWalkEntropy();
-        t++;
-      }
       updateBestNumFalse(); //update bestNumFalse
     }
 
@@ -843,18 +821,24 @@ int main(int argc, char *argv[]) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
+        printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
+        printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
+        printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
+        printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
         if (printSol == 1)
           printSolution();
         return 10;
       }
-    } else
-      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    } // else
+      //printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
+  printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
+  printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;

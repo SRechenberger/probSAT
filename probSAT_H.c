@@ -73,7 +73,6 @@ double *clauseEntropy;
 char *changedEntropy;
 double goodEntropy;
 
-
 /*----probSAT variables----*/
 /** Look-up table for the functions. The values are computed in the initProbSAT method.*/
 double *probsBreak;
@@ -865,8 +864,8 @@ int main(int argc, char *argv[]) {
           printSolution();
         return 10;
       }
-    } else
-      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    } // else
+      // printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
   if (maxTries > 1)

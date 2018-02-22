@@ -75,7 +75,7 @@ benchmarkFromDirectory name dir = do
   fps <- map (\f -> dir ++ "/" ++ f) <$> listDirectory dir
   pure $ Benchmark name fps
 
-runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO GroupResult
+runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int)]
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
   -- status <- newMVar 0
@@ -88,11 +88,11 @@ runBenchmark solvercmd args p bm = do
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
-        l:_ -> words >>> drop 2 >>> concat >>> read >>> pure $ l
+        l:_ -> words >>> drop 1 >>> concat >>> read >>> pure $ l
       case e of
-        ExitSuccess     -> putMVar var $ Unknown flips
-        ExitFailure 10  -> putMVar var $ Success flips
-        ExitFailure 124 -> putMVar var $ Unknown flips
+        ExitSuccess     -> let (e,f) = flips in putMVar var (e, p f)
+        ExitFailure 10  -> putMVar var flips
+        ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f)
         others          -> error $ printf "invalid exit code: %s" (show others)
       -- n <- takeMVar status
       -- putMVar status (n+1)
@@ -100,10 +100,10 @@ runBenchmark solvercmd args p bm = do
       signalQSem semaphor
     pure var
   -- forkIO $ watch status (tests >>> length $ bm) 0
-  evalResults (bmname bm) p <$> mapM takeMVar results'
+  mapM takeMVar results'
  where
   isResultLine :: String -> Bool
-  isResultLine ('c':' ':'F':_) = True
+  isResultLine ('c':'E':_) = True
   isResultLine _ = False
 
   watch :: MVar Int -> Int -> Double -> IO ()
@@ -127,10 +127,10 @@ main = do
   benchmarks <- mapM (uncurry benchmarkFromDirectory) benchmarks'
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
+  putStrLn "output"
   withFile logname WriteMode $ \hdl -> do
-    hPutStr hdl $ printf "%-20s\t%-20s\t%-20s\t%-20s\t%-20s\t%-20s\n"
-      "name" "total" "succs" "avg flips" "max flips" "min flips"
-    forM_ results (show >>> hPutStr hdl)
+    hPrintf hdl "%-20s,%-20s\n" "entropy" "flips"
+    forM_ (concat results) (uncurry (hPrintf hdl "%.5f,%d\n"))
 
 
 

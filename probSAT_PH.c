@@ -75,6 +75,9 @@ double falseClauseEntropySum;
 char *changedEntropy;
 
 
+int *flipCount;
+int mostFlipped;
+
 /*----probSAT variables----*/
 /** Look-up table for the functions. The values are computed in the initProbSAT method.*/
 double *probsBreak;
@@ -193,6 +196,7 @@ static inline void allocateMemory() {
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
   clauseEntropy = (double*) malloc(sizeof(double) * (numClauses + 1));
   changedEntropy = (char*) malloc(sizeof(char) * (numClauses + 1));
+  flipCount = (int*) malloc(sizeof(int) * (numVars + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -326,6 +330,7 @@ static inline void init() {
   int critLit = 0, lit;
   numFalse = 0;
   falseClauseEntropySum = 0;
+  mostFlipped = 0;
 
   // initialize numTrueLit and whereFalse for each clause
   for (i = 1; i <= numClauses; i++) {
@@ -341,6 +346,7 @@ static inline void init() {
     atom[i] = rand() % 2;
     // initiate break score for literal i
     breaks[i] = 0;
+    flipCount[i] = 0;
   }
 
   //pass trough all clauses and apply the assignment previously generated
@@ -540,6 +546,7 @@ static inline void pickAndFlip() {
     xMakesSat = bestVar; //if x=0 then all clauses containing x will be made sat after fliping x
 
   atom[bestVar] = 1 - atom[bestVar];
+  flipCount[bestVar]++;
 
   //1. all clauses that contain the literal xMakesSat will become SAT, if they where not already sat.
   i = 0;
@@ -827,6 +834,18 @@ void setupParameters() {
     initLookUpTable = initExp;
 }
 
+double walkEntropy(){
+  double sum = 0, p;
+  for(int i = 1;i <= numVars; i++){
+    if(flipCount[i]){
+      p = (double)flipCount[i] / (double) flip;
+      sum -= p * log2(p);
+    }
+  }
+  return sum;
+}
+
+
 int main(int argc, char *argv[]) {
   try = 0;
   tryTime = 0.;
@@ -869,10 +888,12 @@ int main(int argc, char *argv[]) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
+        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
+        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
         if (printSol == 1)
           printSolution();
         return 10;
@@ -881,6 +902,7 @@ int main(int argc, char *argv[]) {
       printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
+  printf("cE (%.2f,%lld)\n", walkEntropy(), flip);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;
