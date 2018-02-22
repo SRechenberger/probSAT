@@ -82,7 +82,7 @@ benchmarkFromDirectory name dir = do
   fps <- map (\f -> dir ++ "/" ++ f) <$> listDirectory dir
   pure $ Benchmark name fps
 
-runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Bool)]
+runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Double, Bool)]
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
   -- status <- newMVar 0
@@ -90,8 +90,8 @@ runBenchmark solvercmd args p bm = do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      r <- getRandomR (0.0,10)
-      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ ["--cb", printf "%.2f" (r :: Double)] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      r <- pure 2.1
+      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ {-["--cb", printf "%.2f" (r :: Double)] ++ -} [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
@@ -138,10 +138,12 @@ main = do
   withFile logname WriteMode $ \hdl -> do
     hPrintf hdl "%-20s,%-20s,%-20s\n" "entropy" "flips" "cb"
     forM_ (concat results) ((\f (a,b,c,_) -> f a b c) (hPrintf hdl "%.5f,%d,%.2f\n"))
-  printf "%-20s%-20s%-20s%-20s\n" "solved" "total" "average flips" "average entropy"
-  printf "%-20d%-20d%-20d%-20.3f\n"
-    (length $ concat results)
-    (length (filter (\(_,_,_,b) -> b) (concat results)))
-    ((concat >>> map (\(_,f,_,_) -> f) >>> sum >>> (`div` length (concat results))) results)
-    ((concat >>> map (\(e,_,_,_) -> e) >>> sum >>> (/ toEnum (length (concat results)))) results)
+
+  printf "%-20s%-20s%-20s%-20s\n" "total" "solved" "average flips" "average entropy"
+  forM_ results $ \result -> do
+    printf "%-20d%-20d%-20d%-20.3f\n"
+      (length result)
+      (length (filter (\(_,_,_,b) -> b) result))
+      ((map (\(_,f,_,_) -> f) >>> sum >>> (`div` length result)) result)
+      ((map (\(e,_,_,_) -> e) >>> sum >>> (/ toEnum (length result))) result)
 
