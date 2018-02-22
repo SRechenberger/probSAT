@@ -103,10 +103,8 @@ int bestNumFalse;
 //parameters flags - indicates if the parameters were set on the command line
 int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
 
-char *justChosen;
-int *clauseCount;
-int mostChosenClause;
-double maxClauseEntropy;
+int *flipCount;
+double maxEntropy;
 
 inline int abs(int a) {
   return (a < 0) ? -a : a;
@@ -194,8 +192,7 @@ static inline void allocateMemory() {
   numOccurrence = (int*) malloc(sizeof(int) * (numLiterals + 1));
   occurrence = (int**) malloc(sizeof(int*) * (numLiterals + 1));
   critVar = (int*) malloc(sizeof(int) * (numClauses + 1));
-  clauseCount = (int*) malloc(sizeof(int) * (numClauses + 1));
-  justChosen = (char*) malloc(sizeof(char) * (numClauses + 1));
+  flipCount = (int*) malloc(sizeof(int) * (numVars + 1));
 
   // Allocating memory for the assignment dependent data.
   falseClause = (int*) malloc(sizeof(int) * (numClauses + 1));
@@ -318,8 +315,8 @@ static inline void parseFile() {
   }
   probs = (double*) malloc(sizeof(double) * (numVars + 1));
   breaks = (int*) malloc(sizeof(int) * (numVars + 1));
+  maxEntropy = log2(numVars);
   free(numOccurrenceT);
-  maxClauseEntropy = log2(numClauses);
   fclose(fp);
 }
 
@@ -333,7 +330,6 @@ static inline void init() {
   for (i = 1; i <= numClauses; i++) {
     numTrueLit[i] = 0;
     whereFalse[i] = -1;
-    justChosen[i] = 0;
   }
 
   // generate random assignment
@@ -344,11 +340,11 @@ static inline void init() {
     last[i] = atom[i];
     // initiate break score for literal i
     breaks[i] = 0;
+    flipCount[i] = 0;
   }
 
   //pass trough all clauses and apply the assignment previously generated
   for (i = 1; i <= numClauses; i++) {
-    clauseCount[i] = 0;
     j = 0;
     while ((lit = clause[i][j])) {
       // if a literals is satisfied by the assignment
@@ -488,7 +484,6 @@ static inline void pickAndFlip() {
     sumProb += probs[i];
     i++;
   }
-  clauseCount[rClause]++;
 
   // choosing a literal in clause C_u
   randPosition = (double) (rand()) / RAND_MAX * sumProb;
@@ -498,6 +493,7 @@ static inline void pickAndFlip() {
       break;
   }
   bestVar = abs(clause[rClause][i]);
+  flipCount[bestVar]++;
 
   if (atom[bestVar] == 1)
     xMakesSat = -bestVar; //if x=1 then all clauses containing -x will be made sat after fliping x
@@ -769,11 +765,11 @@ void setupParameters() {
     initLookUpTable = initExp;
 }
 
-double clauseEntropy(){
+double walkEntropy(){
   double sum = 0, p;
-  for(int i = 1;i <= numClauses; i++){
-    if(clauseCount[i]){
-      p = (double)clauseCount[i] / (double) flip;
+  for(int i = 1;i <= numVars; i++){
+    if(flipCount[i]){
+      p = (double)flipCount[i] / (double) flip;
       sum -= p * log2(p);
     }
   }
@@ -821,24 +817,24 @@ int main(int argc, char *argv[]) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
-        printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
-        printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
+        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
+        printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
-        printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
-        printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
+        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
+        printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
         if (printSol == 1)
           printSolution();
         return 10;
       }
-    } // else
-      //printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    } else
+      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
-  printf("cE (%.2f, %lld)\n", clauseEntropy(), flip);
-  printf("c Entropy: %.2f of %.2f\n", clauseEntropy(), maxClauseEntropy);
+  printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
+  printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;
