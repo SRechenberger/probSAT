@@ -98,9 +98,9 @@ runBenchmark solvercmd args p bm = do
         []  -> error $ printf "runBenchmark: %s: no result line." fp
         l:_ -> words >>> drop 1 >>> concat >>> read >>> pure $ l
       case e of
-        ExitSuccess     -> let (e,f) = flips in putMVar var (e, p f, False)
-        ExitFailure 10  -> let (e,f) = flips in putMVar var (e, f, True)
-        ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f, False)
+        ExitSuccess     -> let (e,f) = flips in putMVar var (e, p f, r, False)
+        ExitFailure 10  -> let (e,f) = flips in putMVar var (e, f  , r, True)
+        ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f, r, False)
         others          -> error $ printf "invalid exit code: %s" (show others)
       -- n <- takeMVar status
       -- putMVar status (n+1)
@@ -136,12 +136,12 @@ main = do
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
   withFile logname WriteMode $ \hdl -> do
-    hPrintf hdl "%-20s,%-20s\n" "entropy" "flips"
-    forM_ (concat results) ((\f (a,b,_) -> f a b) (hPrintf hdl "%.5f,%d\n"))
+    hPrintf hdl "%-20s,%-20s,%-20s\n" "entropy" "flips" "cb"
+    forM_ (concat results) ((\f (a,b,c,_) -> f a b c) (hPrintf hdl "%.5f,%d,%.2f\n"))
   printf "%-20s%-20s%-20s%-20s\n" "solved" "total" "average flips" "average entropy"
   printf "%-20d%-20d%-20d%-20.3f\n"
     (length $ concat results)
-    (length (filter (\(_,_,b) -> b) (concat results)))
-    ((concat >>> map (\(_,f,_) -> f) >>> sum >>> (`div` length (concat results))) results)
-    ((concat >>> map (\(e,_,_) -> e) >>> sum >>> (/ toEnum (length (concat results)))) results)
+    (length (filter (\(_,_,_,b) -> b) (concat results)))
+    ((concat >>> map (\(_,f,_,_) -> f) >>> sum >>> (`div` length (concat results))) results)
+    ((concat >>> map (\(e,_,_,_) -> e) >>> sum >>> (/ toEnum (length (concat results)))) results)
 
