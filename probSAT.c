@@ -780,6 +780,7 @@ int main(int argc, char *argv[]) {
   try = 0;
   tryTime = 0.;
   double totalTime = 0.;
+  double entropySum = 0.0;
   // parse command line arguments
   parseParameters(argc, argv);
   // parse CNF file
@@ -811,30 +812,32 @@ int main(int argc, char *argv[]) {
       updateBestNumFalse(); //update bestNumFalse
     }
 
+    entropySum += walkEntropy();
+
     tryTime = elapsed_seconds();
     totalTime += tryTime;
     if (numFalse == 0) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
-        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
-        printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
+        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+        printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
-        printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
-        printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
+        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+        printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
         if (printSol == 1)
           printSolution();
         return 10;
       }
-    } else
-      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
+    } // else
+      //) printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
-  printf("cE (%.2f, %lld)\n", walkEntropy(), flip);
-  printf("c Entropy: %.2f of %.2f\n", walkEntropy(), maxEntropy);
+  printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+  printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;

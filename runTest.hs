@@ -14,6 +14,13 @@ import Text.Printf
 import Data.Foldable
 import Data.Function
 
+import Control.Monad.Random
+
+import Debug.Trace
+
+debug :: Show a => a -> a
+debug a = trace (show a) a
+
 force :: NFData a => a -> a
 force a = id $!! a
 
@@ -75,7 +82,7 @@ benchmarkFromDirectory name dir = do
   fps <- map (\f -> dir ++ "/" ++ f) <$> listDirectory dir
   pure $ Benchmark name fps
 
-runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int)]
+runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Bool)]
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
   -- status <- newMVar 0
@@ -83,16 +90,17 @@ runBenchmark solvercmd args p bm = do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      (_, Just hout, _, hdl) <- createProcess (proc "timeout" $ ["10", solvercmd] ++ args ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      r <- getRandomR (0.0,10)
+      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ ["--cb", printf "%.2f" (r :: Double)] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
         []  -> error $ printf "runBenchmark: %s: no result line." fp
         l:_ -> words >>> drop 1 >>> concat >>> read >>> pure $ l
       case e of
-        ExitSuccess     -> let (e,f) = flips in putMVar var (e, p f)
-        ExitFailure 10  -> putMVar var flips
-        ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f)
+        ExitSuccess     -> let (e,f) = flips in putMVar var (e, p f, False)
+        ExitFailure 10  -> let (e,f) = flips in putMVar var (e, f, True)
+        ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f, False)
         others          -> error $ printf "invalid exit code: %s" (show others)
       -- n <- takeMVar status
       -- putMVar status (n+1)
@@ -127,16 +135,13 @@ main = do
   benchmarks <- mapM (uncurry benchmarkFromDirectory) benchmarks'
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
-  putStrLn "output"
   withFile logname WriteMode $ \hdl -> do
     hPrintf hdl "%-20s,%-20s\n" "entropy" "flips"
-    forM_ (concat results) (uncurry (hPrintf hdl "%.5f,%d\n"))
-
-
-
-
-
-
-
-
+    forM_ (concat results) ((\f (a,b,_) -> f a b) (hPrintf hdl "%.5f,%d\n"))
+  printf "%-20s%-20s%-20s%-20s\n" "solved" "total" "average flips" "average entropy"
+  printf "%-20d%-20d%-20d%-20.3f\n"
+    (length $ concat results)
+    (length (filter (\(_,_,b) -> b) (concat results)))
+    ((concat >>> map (\(_,f,_) -> f) >>> sum >>> (`div` length (concat results))) results)
+    ((concat >>> map (\(e,_,_) -> e) >>> sum >>> (/ toEnum (length (concat results)))) results)
 
