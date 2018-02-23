@@ -85,7 +85,7 @@ benchmarkFromDirectory name dir = do
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Double, Bool)]
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
-  -- status <- newMVar 0
+  status <- newMVar 0
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
@@ -102,12 +102,12 @@ runBenchmark solvercmd args p bm = do
         ExitFailure 10  -> let (e,f) = flips in putMVar var (e, f  , r, True)
         ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f, r, False)
         others          -> error $ printf "invalid exit code: %s" (show others)
-      -- n <- takeMVar status
-      -- putMVar status (n+1)
+      n <- takeMVar status
+      putMVar status (n+1)
       hClose hout
       signalQSem semaphor
     pure var
-  -- forkIO $ watch status (tests >>> length $ bm) 0
+  forkIO $ watch status (tests >>> length $ bm) 0
   mapM takeMVar results'
  where
   isResultLine :: String -> Bool
@@ -133,6 +133,7 @@ main = do
               | otherwise    = (* penalty')
       benchmarks' = map words >>> map (\[n,d] -> (n,d)) $!! benchmarks''
   benchmarks <- mapM (uncurry benchmarkFromDirectory) benchmarks'
+  printf "Running %d benchmarks\n" (length benchmarks)
   results <- forM benchmarks $ \b -> do
     runBenchmark solver (words args) penalty b
   withFile logname WriteMode $ \hdl -> do

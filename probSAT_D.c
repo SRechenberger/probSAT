@@ -106,6 +106,8 @@ int cm_spec = 0, cb_spec = 0, fct_spec = 0, caching_spec = 0;
 int *flipCount;
 double maxEntropy;
 
+double noise;
+
 inline int abs(int a) {
   return (a < 0) ? -a : a;
 }
@@ -325,6 +327,7 @@ static inline void init() {
   register int i, j;
   int critLit = 0, lit;
   numFalse = 0;
+  noise = 0;
 
   // initialize numTrueLit and whereFalse for each clause
   for (i = 1; i <= numClauses; i++) {
@@ -473,6 +476,7 @@ static inline void pickAndFlip() {
   // the calculated distribution
   double sumProb = 0.0;
   double randPosition;
+  double tmp, r;
   register int i, j;
   int tClause; //temporary clause variable
   int xMakesSat; //tells which literal of x will make the clauses where it appears sat.
@@ -481,6 +485,14 @@ static inline void pickAndFlip() {
   while ((var = abs(clause[rClause][i]))) {
     // calculate the probability of choosing literal i
     probs[i] = probsBreak[breaks[var]];
+    r = (double)(rand())/(double)(RAND_MAX);
+    tmp = r * noise * probs[i];
+
+    // printf("%f * %f * %f = %f\n", r, noise, probs[i], tmp);
+
+
+    // printf("%f + %f = %f\n", probs[i], tmp, probs[i] + tmp);
+    probs[i] = probs[i] + tmp;
     sumProb += probs[i];
     i++;
   }
@@ -780,11 +792,13 @@ double walkEntropy(){
   return sum;
 }
 
-static inline void adjustCB(){
-  if(walkEntropy() < 6){
-    cb *= 0.99;
+static inline void adjustNoise(){
+  if(walkEntropy() < log2(numVars)*0.9){
+    noise -= 0.01;
+    noise = noise < -1 ? -1 : noise;
   } else {
-    cb *= 1.01;
+    noise += 0.01;
+    noise = noise > 1 ? 1 : noise;
   }
 
 }
@@ -824,9 +838,9 @@ int main(int argc, char *argv[]) {
                                                    * var <- random variable x according to probability f(x,a)/(SUM z IN C_u: f(z,a))
                                                    * flip(var)
                                                    */
-      if(flip % (maxFlips/10) == 0){
-        adjustCB();
-      }
+  //    if(flip % (maxFlips/10) == 0){
+        if(flip % (maxFlips/100) == 0) adjustNoise();
+  //    }
       updateBestNumFalse(); //update bestNumFalse
     }
 
@@ -839,23 +853,23 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
         printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
-        printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
+        printf("c Entropy: %.2f of %.2f; noise: %f\n", entropySum / (double) (1+try), maxEntropy, noise);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
         printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
-        printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
+        printf("c Entropy: %.2f of %.2f; noise: %f\n", entropySum / (double) (1+try), maxEntropy, noise);
         if (printSol == 1)
           printSolution();
         return 10;
       }
     } // else
-      printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec) (%.2f)\n", bestNumFalse, numFalse, tryTime, cb);
+      // printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec) (%.2f)\n", bestNumFalse, numFalse, tryTime, cb);
   }
   printEndStatistics();
   printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
-  printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
+  printf("c Entropy: %.2f of %.2f; noise: %f\n", entropySum / (double) (1+try), maxEntropy, noise);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);
   return 0;
