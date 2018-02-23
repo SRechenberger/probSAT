@@ -85,13 +85,14 @@ benchmarkFromDirectory name dir = do
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Double, Bool)]
 runBenchmark solvercmd args p bm = do
   semaphor <- newQSem 4
-  status <- newMVar 0
+  -- status <- newMVar 0
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      r <- pure 2.1
-      (_, Just hout, _, hdl) <- createProcess (proc solvercmd $ args ++ {-["--cb", printf "%.2f" (r :: Double)] ++ -} [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
+      r <- getRandomR (0,4) -- pure 2.1
+      (_, Just hout, _, hdl) <- createProcess
+        (proc solvercmd $ args ++ ["--cb", printf "%.2f" (r :: Double)] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
       rLine' <- (force >>> lines >>> filter isResultLine) <$> hGetContents hout
       flips <- case rLine' of
@@ -102,12 +103,12 @@ runBenchmark solvercmd args p bm = do
         ExitFailure 10  -> let (e,f) = flips in putMVar var (e, f  , r, True)
         ExitFailure 124 -> let (e,f) = flips in putMVar var (e, p f, r, False)
         others          -> error $ printf "invalid exit code: %s" (show others)
-      n <- takeMVar status
-      putMVar status (n+1)
+      -- n <- takeMVar status
+      -- putMVar status (n+1)
       hClose hout
       signalQSem semaphor
     pure var
-  forkIO $ watch status (tests >>> length $ bm) 0
+--  forkIO $ watch status (tests >>> length $ bm) 0
   mapM takeMVar results'
  where
   isResultLine :: String -> Bool

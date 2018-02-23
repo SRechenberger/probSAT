@@ -820,13 +820,13 @@ int main(int argc, char *argv[]) {
       if (!checkAssignment()) {
         fprintf(stderr, "c ERROR the assignment is not valid!");
         printf("c UNKNOWN");
-        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip);
         printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
         return 0;
       } else {
         printEndStatistics();
         printf("s SATISFIABLE\n");
-        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+        printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip);
         printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
         if (printSol == 1)
           printSolution();
@@ -836,7 +836,7 @@ int main(int argc, char *argv[]) {
       //) printf("c UNKNOWN best(%4d) current(%4d) (%-15.5fsec)\n", bestNumFalse, numFalse, tryTime);
   }
   printEndStatistics();
-  printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip + try * maxFlips);
+  printf("cE (%.2f, %lld)\n", entropySum / (double) (1+try), flip);
   printf("c Entropy: %.2f of %.2f\n", entropySum / (double) (1+try), maxEntropy);
   if (maxTries > 1)
     printf("c %-30s: %-8.3fsec\n", "Mean time per try", totalTime / (double) try);

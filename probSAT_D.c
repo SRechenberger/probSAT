@@ -793,12 +793,12 @@ double walkEntropy(){
 }
 
 static inline void adjustNoise(){
-  if(walkEntropy() < log2(numVars)*0.9){
-    noise -= 0.01;
-    noise = noise < -1 ? -1 : noise;
-  } else {
+  if(walkEntropy() < log2(numVars)*0.91){
     noise += 0.01;
     noise = noise > 1 ? 1 : noise;
+  } else {
+    noise -= 0.01;
+    noise = noise < 0 ? 0 : noise;
   }
 
 }
