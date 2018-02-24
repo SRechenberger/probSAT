@@ -84,13 +84,13 @@ benchmarkFromDirectory name dir = do
 
 runBenchmark :: String -> [String] -> Penalty -> Benchmark -> IO [(Double, Int, Double, Bool)]
 runBenchmark solvercmd args p bm = do
-  semaphor <- newQSem 4
+  semaphor <- newQSem 10
   -- status <- newMVar 0
   results' <- forM (tests bm) $ \fp -> do
     var <- newEmptyMVar
     forkIO $ do
       waitQSem semaphor
-      r <- getRandomR (0,4) -- pure 2.1
+      r <- getRandomR (0,5) -- pure 2.1
       (_, Just hout, _, hdl) <- createProcess
         (proc solvercmd $ args ++ ["--cb", printf "%.2f" (r :: Double)] ++ [fp]){ std_out = CreatePipe, std_err = UseHandle stderr }
       e <- waitForProcess hdl
